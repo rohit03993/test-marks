@@ -16,15 +16,17 @@ const props = defineProps({
 
 const search = ref(props.filters.search || '');
 const classFilter = ref(props.filters.class_id || '');
+const perPage = ref(props.filters.per_page || '20');
 const selectedStudents = ref([]);
 const selectAll = ref(false);
 
-watch([search, classFilter], ([searchValue, classValue]) => {
+watch([search, classFilter, perPage], ([searchValue, classValue, perPageValue]) => {
     router.get(
         route('students.index'),
         { 
             search: searchValue,
             class_id: classValue || null,
+            per_page: perPageValue || null,
         },
         {
             preserveState: true,
@@ -38,8 +40,10 @@ const hasSelectedStudents = computed(() => selectedStudents.value.length > 0);
 
 const toggleSelectAll = () => {
     if (selectAll.value) {
+        // Select all students on current page
         selectedStudents.value = props.students.data.map(s => s.id);
     } else {
+        // Deselect all
         selectedStudents.value = [];
     }
 };
@@ -101,7 +105,7 @@ const formatDate = (date) => {
                 <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
                     <!-- Search and Filter Bar -->
                     <div class="p-6 border-b border-gray-200">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <InputLabel for="search" value="Search Students" />
                                 <TextInput
@@ -121,6 +125,7 @@ const formatDate = (date) => {
                                     class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 >
                                     <option value="">All Classes</option>
+                                    <option value="unassigned">Unassigned</option>
                                     <option
                                         v-for="classItem in classes"
                                         :key="classItem.id"
@@ -128,6 +133,19 @@ const formatDate = (date) => {
                                     >
                                         {{ classItem.name }}
                                     </option>
+                                </select>
+                            </div>
+                            <div>
+                                <InputLabel for="per_page" value="Show Per Page" />
+                                <select
+                                    id="per_page"
+                                    v-model="perPage"
+                                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    <option value="20">20</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="all">All</option>
                                 </select>
                             </div>
                         </div>
@@ -209,7 +227,12 @@ const formatDate = (date) => {
                     <div v-if="students.links && students.links.length > 3" class="px-6 py-4 border-t border-gray-200">
                         <div class="flex items-center justify-between">
                             <div class="text-sm text-gray-700">
-                                Showing {{ students.from }} to {{ students.to }} of {{ students.total }} results
+                                <span v-if="perPage === 'all'">
+                                    Showing all {{ students.total }} results
+                                </span>
+                                <span v-else>
+                                    Showing {{ students.from }} to {{ students.to }} of {{ students.total }} results
+                                </span>
                             </div>
                             <div class="flex space-x-2">
                                 <Link

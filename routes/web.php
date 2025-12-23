@@ -18,9 +18,7 @@ Route::middleware([
     config('jetstream.auth_session'),
     'verified',
 ])->group(function () {
-    Route::get('/dashboard', function () {
-        return Inertia::render('Dashboard');
-    })->name('dashboard');
+    Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
 
     // Students routes
     Route::resource('students', \App\Http\Controllers\StudentController::class)->except(['show', 'create', 'edit', 'update', 'destroy']);

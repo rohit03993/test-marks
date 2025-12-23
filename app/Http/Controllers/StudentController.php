@@ -26,26 +26,55 @@ class StudentController extends Controller
      */
     public function index(Request $request)
     {
-        $students = Student::query()
+        $perPage = $request->per_page ?? 20;
+        
+        // Handle "all" option
+        if ($perPage === 'all') {
+            $perPage = 999999; // Large number to get all records
+        } else {
+            $perPage = (int) $perPage;
+        }
+
+        $query = Student::query()
             ->with(['activeClassStudent.academicClass'])
             ->when($request->search, function ($query, $search) {
                 $query->where('name', 'like', "%{$search}%")
                     ->orWhere('roll_number', 'like', "%{$search}%");
             })
-            ->when($request->class_id, function ($query, $classId) {
+            ->when($request->class_id === 'unassigned', function ($query) {
+                // Filter for students without active class assignment
+                $query->whereDoesntHave('activeClassStudent', function ($q) {
+                    $q->where('is_active', true);
+                });
+            })
+            ->when($request->class_id && $request->class_id !== 'unassigned', function ($query, $classId) {
                 $query->whereHas('activeClassStudent', function ($q) use ($classId) {
                     $q->where('class_id', $classId);
                 });
             })
-            ->latest()
-            ->paginate(20);
+            ->latest();
+
+        // If per_page is 'all', get all results without pagination
+        if ($perPage === 999999) {
+            $students = $query->get();
+            // Convert to paginator-like structure for frontend compatibility
+            $students = new \Illuminate\Pagination\LengthAwarePaginator(
+                $students,
+                $students->count(),
+                $students->count(),
+                1,
+                ['path' => $request->url(), 'query' => $request->query()]
+            );
+        } else {
+            $students = $query->paginate($perPage);
+        }
 
         $classes = \App\Models\AcademicClass::orderBy('name')->get();
 
         return Inertia::render('Students/Index', [
             'students' => $students,
             'classes' => $classes,
-            'filters' => $request->only(['search', 'class_id']),
+            'filters' => $request->only(['search', 'class_id', 'per_page']),
         ]);
     }
 
