@@ -23,7 +23,7 @@ class ExamResultController extends Controller
      */
     public function showUpload(Exam $exam)
     {
-        $exam->load('academicClasses');
+        $exam->load(['academicClasses', 'subjects']);
         
         return Inertia::render('Exams/UploadResults', [
             'exam' => [
@@ -34,6 +34,12 @@ class ExamResultController extends Controller
                     return [
                         'id' => $class->id,
                         'name' => $class->name,
+                    ];
+                }),
+                'subjects' => $exam->subjects->map(function ($subject) {
+                    return [
+                        'id' => $subject->id,
+                        'name' => $subject->name,
                     ];
                 }),
             ],
@@ -50,14 +56,18 @@ class ExamResultController extends Controller
             'class_id' => 'required|exists:classes,id',
             'column_mapping' => 'required|array',
             'column_mapping.roll_number' => 'required|string',
-            'column_mapping.physics' => 'nullable|string',
-            'column_mapping.chemistry' => 'nullable|string',
-            'column_mapping.mathematics' => 'nullable|string',
+            // Dynamic subject columns - no hardcoded validation
         ]);
 
         // Verify that the selected class belongs to this exam
         if (!$exam->academicClasses()->where('classes.id', $request->class_id)->exists()) {
             return back()->withErrors(['error' => 'Selected class does not belong to this exam.']);
+        }
+
+        // Verify exam has subjects
+        $exam->load('subjects');
+        if ($exam->subjects->isEmpty()) {
+            return back()->withErrors(['error' => 'Exam must have at least one subject assigned.']);
         }
 
         try {

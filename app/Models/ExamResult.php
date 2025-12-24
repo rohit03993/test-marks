@@ -53,7 +53,11 @@ class ExamResult extends Model
      */
     public function calculateTotals(): void
     {
-        $marks = $this->subjectMarks()
+        // Refresh relationship to get latest marks
+        $this->load('subjectMarks');
+        
+        // Get all non-null marks (0 and negative are included)
+        $marks = $this->subjectMarks
             ->whereNotNull('marks')
             ->pluck('marks')
             ->toArray();

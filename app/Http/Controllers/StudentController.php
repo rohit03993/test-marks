@@ -257,22 +257,38 @@ class StudentController extends Controller
                     continue; // Skip if exam is missing
                 }
                 
+                // Load exam subjects
+                $examResult->exam->load('subjects');
+                
+                // Build subject marks map
                 $subjectMarks = [];
                 foreach ($examResult->subjectMarks as $subjectMark) {
                     if ($subjectMark->subject) {
-                        $subjectMarks[$subjectMark->subject->name] = $subjectMark->marks;
+                        $subjectMarks[$subjectMark->subject->id] = [
+                            'name' => $subjectMark->subject->name,
+                            'marks' => $subjectMark->marks,
+                        ];
                     }
                 }
 
+                // Build subjects array with all exam subjects (even if no marks)
+                $subjects = [];
+                foreach ($examResult->exam->subjects as $examSubject) {
+                    $subjects[] = [
+                        'id' => $examSubject->id,
+                        'name' => $examSubject->name,
+                        'marks' => $subjectMarks[$examSubject->id]['marks'] ?? null,
+                    ];
+                }
+
                 $examHistory[] = [
+                    'exam_result_id' => $examResult->id, // For edit/delete operations
                     'exam_id' => $examResult->exam->id,
                     'exam_name' => $examResult->exam->name,
                     'exam_date' => $examResult->exam->exam_date,
                     'class_name' => $examResult->classStudent->academicClass->name ?? 'Unknown',
                     'roll_number' => $examResult->classStudent->roll_number ?? '',
-                    'physics' => $subjectMarks['Physics'] ?? null,
-                    'chemistry' => $subjectMarks['Chemistry'] ?? null,
-                    'mathematics' => $subjectMarks['Mathematics'] ?? null,
+                    'subjects' => $subjects, // Dynamic subjects array
                     'total' => $examResult->total ?? 0,
                     'average' => $examResult->average ?? 0,
                     'status' => $examResult->status ?? 'absent',
@@ -291,5 +307,99 @@ class StudentController extends Controller
             'student' => $student,
             'examHistory' => $examHistory,
         ]);
+    }
+
+    /**
+     * Update exam marks for a single student
+     */
+    public function updateExamMarks(Request $request, \App\Models\ExamResult $examResult)
+    {
+        $request->validate([
+            'marks' => 'required|array',
+            'marks.*' => 'nullable|numeric',
+        ]);
+
+        // Verify the exam result belongs to a student (security check)
+        $examResult->load('classStudent.student');
+        
+        if (!$examResult->classStudent) {
+            return back()->withErrors(['error' => 'Exam result not found.']);
+        }
+
+        \DB::beginTransaction();
+        try {
+            // Update subject marks
+            foreach ($request->marks as $subjectId => $marksValue) {
+                // Handle different input types
+                // Empty string, null, or 'null' string = absent
+                if ($marksValue === '' || $marksValue === null || $marksValue === 'null' || $marksValue === false) {
+                    $marksValue = null; // Absent
+                } else {
+                    // Convert to float - 0 is a valid mark!
+                    // Check if it's numeric (including negative numbers and 0)
+                    if (is_numeric($marksValue)) {
+                        $marksValue = (float) $marksValue; // This preserves 0, negative numbers, etc.
+                    } else {
+                        $marksValue = null; // Non-numeric = absent
+                    }
+                }
+                
+                \App\Models\ExamSubjectMark::updateOrCreate(
+                    [
+                        'exam_result_id' => $examResult->id,
+                        'subject_id' => $subjectId,
+                    ],
+                    [
+                        'marks' => $marksValue,
+                    ]
+                );
+            }
+
+            // Refresh the relationship to get updated marks
+            $examResult->load('subjectMarks');
+            
+            // Recalculate total and average
+            $examResult->calculateTotals();
+            
+            // Refresh again after calculation
+            $examResult->refresh();
+
+            // Update status based on marks
+            $hasAnyMarks = \App\Models\ExamSubjectMark::where('exam_result_id', $examResult->id)
+                ->whereNotNull('marks')
+                ->exists();
+            
+            $examResult->update([
+                'status' => $hasAnyMarks ? 'present' : 'absent',
+            ]);
+
+            \DB::commit();
+
+            return back()->with('success', 'Marks updated successfully.');
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            return back()->withErrors(['error' => 'Failed to update marks: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Delete exam result for a single student
+     */
+    public function deleteExamResult(\App\Models\ExamResult $examResult)
+    {
+        // Verify the exam result belongs to a student (security check)
+        $examResult->load('classStudent.student');
+        
+        if (!$examResult->classStudent) {
+            return back()->withErrors(['error' => 'Exam result not found.']);
+        }
+
+        $studentId = $examResult->classStudent->student_id;
+        
+        // Delete exam result (cascade will delete subject marks)
+        $examResult->delete();
+
+        return redirect()->route('students.profile', $studentId)
+            ->with('success', 'Exam result deleted successfully.');
     }
 }

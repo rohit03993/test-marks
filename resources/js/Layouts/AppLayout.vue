@@ -139,18 +139,18 @@ const isActive = (routeName) => {
                     </Link>
 
                     <Link
-                        :href="route('quick-upload.index')"
+                        :href="route('results.index')"
                         :class="[
                             'flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors',
-                            isActive('quick-upload.*') 
+                            isActive('results.*') 
                                 ? 'bg-indigo-800 text-white shadow-lg' 
                                 : 'text-indigo-100 hover:bg-indigo-800 hover:text-white'
                         ]"
                     >
                         <svg class="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                         </svg>
-                        Quick Upload
+                        Results
                     </Link>
 
                     <!-- Admin Profile Section (Collapsible) -->

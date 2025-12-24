@@ -13,15 +13,21 @@ const props = defineProps({
     exam: Object,
 });
 
+// Initialize column mapping dynamically based on exam subjects
+const initColumnMapping = () => {
+    const mapping = { roll_number: '' };
+    if (props.exam?.subjects) {
+        props.exam.subjects.forEach(subject => {
+            mapping[subject.name.toLowerCase()] = '';
+        });
+    }
+    return mapping;
+};
+
 const form = useForm({
     file: null,
     class_id: props.exam?.classes?.length === 1 ? props.exam.classes[0].id : '',
-    column_mapping: {
-        roll_number: '',
-        physics: '',
-        chemistry: '',
-        mathematics: '',
-    },
+    column_mapping: initColumnMapping(),
 });
 
 const fileInput = ref(null);
@@ -95,24 +101,31 @@ const autoDetectColumns = (headers) => {
         form.column_mapping.roll_number = headers[rollIndex];
     }
 
-    // Auto-detect Physics
-    const physicsIndex = lowerHeaders.findIndex(h => h.includes('physics') || h.includes('phy'));
-    if (physicsIndex !== -1) {
-        form.column_mapping.physics = headers[physicsIndex];
-    }
-
-    // Auto-detect Chemistry
-    const chemistryIndex = lowerHeaders.findIndex(h => h.includes('chemistry') || h.includes('chem'));
-    if (chemistryIndex !== -1) {
-        form.column_mapping.chemistry = headers[chemistryIndex];
-    }
-
-    // Auto-detect Mathematics
-    const mathIndex = lowerHeaders.findIndex(h => 
-        h.includes('mathematics') || h.includes('math') || h.includes('maths')
-    );
-    if (mathIndex !== -1) {
-        form.column_mapping.mathematics = headers[mathIndex];
+    // Auto-detect subjects dynamically
+    if (props.exam?.subjects) {
+        props.exam.subjects.forEach(subject => {
+            const subjectNameLower = subject.name.toLowerCase();
+            const subjectKey = subjectNameLower;
+            
+            // Try to find matching header
+            const subjectIndex = lowerHeaders.findIndex(h => {
+                const headerLower = h.toLowerCase();
+                // Direct match
+                if (headerLower === subjectNameLower) return true;
+                // Contains match
+                if (headerLower.includes(subjectNameLower) || subjectNameLower.includes(headerLower)) return true;
+                // Common abbreviations
+                if (subjectNameLower.includes('physics') && (headerLower.includes('phy') || headerLower.includes('physics'))) return true;
+                if (subjectNameLower.includes('chemistry') && (headerLower.includes('chem') || headerLower.includes('chemistry'))) return true;
+                if (subjectNameLower.includes('mathematics') && (headerLower.includes('math') || headerLower.includes('maths'))) return true;
+                if (subjectNameLower.includes('biology') && (headerLower.includes('bio') || headerLower.includes('biology'))) return true;
+                return false;
+            });
+            
+            if (subjectIndex !== -1 && !form.column_mapping[subjectKey]) {
+                form.column_mapping[subjectKey] = headers[subjectIndex];
+            }
+        });
     }
 };
 
@@ -144,12 +157,7 @@ const resetFile = () => {
     selectedFile.value = null;
     form.file = null;
     headers.value = [];
-    form.column_mapping = {
-        roll_number: '',
-        physics: '',
-        chemistry: '',
-        mathematics: '',
-    };
+    form.column_mapping = initColumnMapping();
     if (fileInput.value) {
         fileInput.value.value = '';
     }
@@ -256,12 +264,12 @@ const resetFile = () => {
                                         <InputError :message="form.errors['column_mapping.roll_number']" class="mt-2" />
                                     </div>
 
-                                    <!-- Physics Mapping -->
-                                    <div>
-                                        <InputLabel for="physics_column" value="Physics Marks (Optional)" />
+                                    <!-- Dynamic Subject Mapping -->
+                                    <div v-for="subject in exam.subjects" :key="subject.id">
+                                        <InputLabel :for="`subject_${subject.id}_column`" :value="`${subject.name} Marks`" />
                                         <select
-                                            id="physics_column"
-                                            v-model="form.column_mapping.physics"
+                                            :id="`subject_${subject.id}_column`"
+                                            v-model="form.column_mapping[subject.name.toLowerCase()]"
                                             class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         >
                                             <option value="">-- Select Column (Optional) --</option>
@@ -273,47 +281,7 @@ const resetFile = () => {
                                                 {{ header || `Column ${index + 1}` }}
                                             </option>
                                         </select>
-                                        <InputError :message="form.errors['column_mapping.physics']" class="mt-2" />
-                                    </div>
-
-                                    <!-- Chemistry Mapping -->
-                                    <div>
-                                        <InputLabel for="chemistry_column" value="Chemistry Marks (Optional)" />
-                                        <select
-                                            id="chemistry_column"
-                                            v-model="form.column_mapping.chemistry"
-                                            class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        >
-                                            <option value="">-- Select Column (Optional) --</option>
-                                            <option
-                                                v-for="(header, index) in headers"
-                                                :key="index"
-                                                :value="header"
-                                            >
-                                                {{ header || `Column ${index + 1}` }}
-                                            </option>
-                                        </select>
-                                        <InputError :message="form.errors['column_mapping.chemistry']" class="mt-2" />
-                                    </div>
-
-                                    <!-- Mathematics Mapping -->
-                                    <div>
-                                        <InputLabel for="mathematics_column" value="Mathematics Marks (Optional)" />
-                                        <select
-                                            id="mathematics_column"
-                                            v-model="form.column_mapping.mathematics"
-                                            class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        >
-                                            <option value="">-- Select Column (Optional) --</option>
-                                            <option
-                                                v-for="(header, index) in headers"
-                                                :key="index"
-                                                :value="header"
-                                            >
-                                                {{ header || `Column ${index + 1}` }}
-                                            </option>
-                                        </select>
-                                        <InputError :message="form.errors['column_mapping.mathematics']" class="mt-2" />
+                                        <InputError :message="form.errors[`column_mapping.${subject.name.toLowerCase()}`]" class="mt-2" />
                                     </div>
                                 </div>
                             </div>
@@ -330,7 +298,10 @@ const resetFile = () => {
                                     <li>Upload an Excel or CSV file with exam results</li>
                                     <li>First row should contain column headers</li>
                                     <li>Required column: Roll Number</li>
-                                    <li>Optional columns: Physics, Chemistry, Mathematics marks</li>
+                                    <li v-if="exam.subjects && exam.subjects.length > 0">
+                                        Subject columns for this exam: {{ exam.subjects.map(s => s.name).join(', ') }}
+                                    </li>
+                                    <li>System will automatically detect and map subject columns</li>
                                     <li>System will automatically map students by roll number</li>
                                     <li>Students in class but not in Excel will be marked as absent</li>
                                 </ul>

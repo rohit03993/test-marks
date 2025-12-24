@@ -37,4 +37,13 @@ class Exam extends Model
     {
         return $this->hasMany(ExamResult::class, 'exam_id');
     }
+
+    /**
+     * Get the subjects for this exam (many-to-many)
+     */
+    public function subjects(): BelongsToMany
+    {
+        return $this->belongsToMany(Subject::class, 'exam_subject', 'exam_id', 'subject_id')
+            ->withTimestamps();
+    }
 }

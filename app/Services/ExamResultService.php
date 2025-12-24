@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 class ExamResultService
 {
     /**
-     * Process exam result upload
+     * Process exam result upload with dynamic subject detection
      */
     public function processExamResults(Exam $exam, int $classId, array $rows, array $columnMapping): array
     {
@@ -22,11 +22,75 @@ class ExamResultService
             'unmapped' => [],
             'errors' => [],
         ];
-        // Get subjects with lowercase keys for easier lookup
-        $subjects = [];
-        foreach (Subject::all() as $subject) {
-            $subjects[strtolower($subject->name)] = $subject->id;
-            $subjects[$subject->name] = $subject->id; // Also store original case
+
+        // Load exam's subjects
+        $exam->load('subjects');
+        $examSubjects = $exam->subjects;
+        
+        if ($examSubjects->isEmpty()) {
+            throw new \Exception('Exam must have at least one subject assigned.');
+        }
+
+        // Build subject lookup map (case-insensitive matching)
+        $subjectMap = [];
+        foreach ($examSubjects as $subject) {
+            $nameLower = strtolower(trim($subject->name));
+            $subjectMap[$nameLower] = [
+                'id' => $subject->id,
+                'name' => $subject->name,
+            ];
+            // Also add variations (e.g., "Math" for "Mathematics")
+            if (strpos($nameLower, 'math') !== false) {
+                $subjectMap['math'] = $subjectMap[$nameLower];
+                $subjectMap['mathematics'] = $subjectMap[$nameLower];
+            }
+        }
+
+        // Detect subject columns from column mapping (exclude roll_number)
+        // Column mapping structure: ['excel_header' => 'field_name']
+        // e.g., ['physics' => 'physics', 'roll number' => 'roll_number']
+        $detectedSubjects = [];
+        foreach ($columnMapping as $excelColumn => $fieldName) {
+            if ($fieldName === 'roll_number') {
+                continue;
+            }
+            
+            // The fieldName should be the subject name in lowercase (e.g., 'physics', 'chemistry')
+            // Try to find matching subject
+            $fieldNameLower = strtolower(trim($fieldName));
+            $excelColumnLower = strtolower(trim($excelColumn));
+            $matchedSubject = null;
+            
+            // First, try to match by fieldName (the form field name, which is subject name in lowercase)
+            if (isset($subjectMap[$fieldNameLower])) {
+                $matchedSubject = $subjectMap[$fieldNameLower];
+            }
+            // If not found, try to match by Excel column header
+            else if (isset($subjectMap[$excelColumnLower])) {
+                $matchedSubject = $subjectMap[$excelColumnLower];
+            }
+            // Fuzzy match - check if column contains subject name or vice versa
+            else {
+                foreach ($subjectMap as $subjectKey => $subjectData) {
+                    // Check if fieldName or excelColumn matches subject
+                    if (strpos($fieldNameLower, $subjectKey) !== false || 
+                        strpos($subjectKey, $fieldNameLower) !== false ||
+                        strpos($excelColumnLower, $subjectKey) !== false || 
+                        strpos($subjectKey, $excelColumnLower) !== false) {
+                        $matchedSubject = $subjectData;
+                        break;
+                    }
+                }
+            }
+            
+            if ($matchedSubject) {
+                // Store with fieldName as key (this is what we'll use to access row data)
+                $detectedSubjects[$fieldName] = $matchedSubject;
+            }
+        }
+
+        if (empty($detectedSubjects)) {
+            throw new \Exception('No subject columns detected in the uploaded file. Please ensure column headers match exam subjects.');
         }
 
         DB::beginTransaction();
@@ -72,54 +136,50 @@ class ExamResultService
                         ]);
                     }
 
-                    // Process subject marks
+                    // Process subject marks dynamically
                     $marks = [];
                     $totalMarks = 0;
                     $subjectCount = 0;
 
-                    // Map lowercase subject names to proper subject IDs
-                    $subjectMap = [
-                        'physics' => $subjects['physics'] ?? $subjects['Physics'] ?? null,
-                        'chemistry' => $subjects['chemistry'] ?? $subjects['Chemistry'] ?? null,
-                        'mathematics' => $subjects['mathematics'] ?? $subjects['Mathematics'] ?? null,
-                    ];
-
-                    foreach (['physics', 'chemistry', 'mathematics'] as $subjectName) {
-                        $subjectId = $subjectMap[$subjectName] ?? null;
-                        if (!$subjectId) {
-                            continue;
-                        }
-
-                        $markValue = $row[$subjectName] ?? null;
+                    $hasAnyMarks = false; // Track if student has at least one mark (even if 0 or negative)
+                    
+                    foreach ($detectedSubjects as $fieldName => $subjectData) {
+                        $subjectId = $subjectData['id'];
+                        $subjectName = $subjectData['name'];
                         
-                        // Convert to numeric, null if empty
+                        // Get mark value from row using field name
+                        // Row data from extractDataRows uses field_name as keys
+                        $markValue = $row[$fieldName] ?? null;
+                        
+                        // Convert to numeric, null if empty or blank
+                        // 0, -1, -2 are valid marks, only null/blank means absent
                         if ($markValue !== null && $markValue !== '') {
-                            $markValue = is_numeric($markValue) ? (float) $markValue : null;
+                            $trimmedValue = trim((string) $markValue);
+                            if ($trimmedValue === '' || $trimmedValue === null) {
+                                $markValue = null; // Blank = absent
+                            } else if (is_numeric($trimmedValue)) {
+                                $markValue = (float) $trimmedValue; // 0, -1, -2, etc. are valid marks
+                                $hasAnyMarks = true; // Student has at least one mark (even if 0 or negative)
+                            } else {
+                                $markValue = null; // Non-numeric = absent
+                            }
                         } else {
-                            $markValue = null;
-                        }
-
-                        // Validate marks range (0-100)
-                        if ($markValue !== null && ($markValue < 0 || $markValue > 100)) {
-                            $results['errors'][] = [
-                                'row' => $index + 1,
-                                'roll_number' => $rollNumber,
-                                'error' => "Invalid marks for {$subjectName}: {$markValue}",
-                            ];
-                            continue;
+                            $markValue = null; // Empty = absent
                         }
 
                         // Create or update subject mark
+                        // Store null for absent, store 0/-1/-2/etc. for valid marks
                         ExamSubjectMark::updateOrCreate(
                             [
                                 'exam_result_id' => $examResult->id,
                                 'subject_id' => $subjectId,
                             ],
                             [
-                                'marks' => $markValue,
+                                'marks' => $markValue, // Can be null, 0, negative, or positive
                             ]
                         );
 
+                        // Include in calculation if not null (0 and negatives are included)
                         if ($markValue !== null) {
                             $marks[] = $markValue;
                             $totalMarks += $markValue;
@@ -127,14 +187,20 @@ class ExamResultService
                         }
                     }
 
-                    // Calculate total and average
+                    // Calculate total and average (includes 0 and negative marks)
                     $total = $totalMarks;
                     $average = $subjectCount > 0 ? $totalMarks / $subjectCount : 0;
+
+                    // Determine status:
+                    // - If student is in Excel and has at least one mark (even 0 or negative) = present
+                    // - If student is in Excel but all marks are null/blank = absent
+                    // - If student is not in Excel = absent (handled separately below)
+                    $status = $hasAnyMarks ? 'present' : 'absent';
 
                     $examResult->update([
                         'total' => $total,
                         'average' => round($average, 2),
-                        'status' => 'present',
+                        'status' => $status,
                     ]);
 
                     $processedStudentIds[] = $classStudent->id;
@@ -169,16 +235,13 @@ class ExamResultService
                         'average' => 0,
                     ]);
 
-                    // Create absent marks for all subjects
-                    foreach (['Physics', 'Chemistry', 'Mathematics'] as $subjectName) {
-                        $subjectId = $subjects[$subjectName] ?? null;
-                        if ($subjectId) {
-                            ExamSubjectMark::create([
-                                'exam_result_id' => $absentResult->id,
-                                'subject_id' => $subjectId,
-                                'marks' => null, // null = absent
-                            ]);
-                        }
+                    // Create absent marks for all exam subjects
+                    foreach ($examSubjects as $subject) {
+                        ExamSubjectMark::create([
+                            'exam_result_id' => $absentResult->id,
+                            'subject_id' => $subject->id,
+                            'marks' => null, // null = absent
+                        ]);
                     }
 
                     $results['absent_marked']++;

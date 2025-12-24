@@ -178,6 +178,14 @@ const formatDate = (date) => {
                                             Edit
                                         </Link>
                                         <Link
+                                            v-if="exam.exam_results_count > 0"
+                                            :href="route('exams.view-results', exam.id)"
+                                            class="text-blue-600 hover:text-blue-900 mr-4"
+                                        >
+                                            View Results ({{ exam.exam_results_count }})
+                                        </Link>
+                                        <Link
+                                            v-else
                                             :href="route('exams.upload-results', exam.id)"
                                             class="text-green-600 hover:text-green-900 mr-4"
                                         >
@@ -186,7 +194,6 @@ const formatDate = (date) => {
                                         <button
                                             @click="confirmDelete(exam)"
                                             class="text-red-600 hover:text-red-900"
-                                            :disabled="exam.exam_results_count > 0"
                                         >
                                             Delete
                                         </button>
@@ -231,7 +238,13 @@ const formatDate = (date) => {
                 </h2>
 
                 <p class="mt-1 text-sm text-gray-600">
-                    Are you sure you want to delete "{{ examToDelete?.name }}"? This action cannot be undone.
+                    Are you sure you want to delete "{{ examToDelete?.name }}"?
+                </p>
+                <p class="mt-2 text-sm font-medium text-red-600">
+                    ⚠️ This will permanently delete the exam and all results for all students. This action cannot be undone.
+                </p>
+                <p v-if="examToDelete?.exam_results_count > 0" class="mt-2 text-sm text-gray-700">
+                    This exam has {{ examToDelete.exam_results_count }} student results that will be deleted.
                 </p>
 
                 <div class="mt-6 flex justify-end">

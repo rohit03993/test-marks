@@ -26,6 +26,8 @@ Route::middleware([
     Route::post('/students/upload', [\App\Http\Controllers\StudentController::class, 'upload'])->name('students.upload.store');
     Route::post('/students/get-headers', [\App\Http\Controllers\StudentController::class, 'getHeaders'])->name('students.get-headers');
     Route::get('/students/{student}/profile', [\App\Http\Controllers\StudentController::class, 'profile'])->name('students.profile');
+    Route::put('/exam-results/{examResult}/update-marks', [\App\Http\Controllers\StudentController::class, 'updateExamMarks'])->name('exam-results.update-marks');
+    Route::delete('/exam-results/{examResult}', [\App\Http\Controllers\StudentController::class, 'deleteExamResult'])->name('exam-results.delete');
     
     // Search routes
     Route::get('/search', [\App\Http\Controllers\StudentController::class, 'search'])->name('search.index');
@@ -40,18 +42,20 @@ Route::middleware([
 
     // Exams routes
     Route::resource('exams', \App\Http\Controllers\ExamController::class)->except(['show']);
+    Route::post('/exams/create-subject', [\App\Http\Controllers\ExamController::class, 'createSubject'])->name('exams.create-subject');
     
     // Exam Results routes
     Route::get('/exams/{exam}/upload-results', [\App\Http\Controllers\ExamResultController::class, 'showUpload'])->name('exams.upload-results');
     Route::post('/exams/{exam}/upload-results', [\App\Http\Controllers\ExamResultController::class, 'upload'])->name('exams.upload-results.store');
+    Route::get('/exams/{exam}/view-results', [\App\Http\Controllers\ExamController::class, 'viewResults'])->name('exams.view-results');
     Route::post('/exams/get-headers', [\App\Http\Controllers\ExamResultController::class, 'getHeaders'])->name('exams.get-headers');
+    
+    // Results routes
+    Route::get('/results', [\App\Http\Controllers\ResultsController::class, 'index'])->name('results.index');
+    Route::get('/results/class/{class}', [\App\Http\Controllers\ResultsController::class, 'showClass'])->name('results.class');
+    Route::get('/results/class/{class}/export', [\App\Http\Controllers\ResultsController::class, 'exportClass'])->name('results.class.export');
     
     // Admin Reset routes
     Route::get('/admin/reset', [\App\Http\Controllers\ResetController::class, 'index'])->name('reset.index');
     Route::post('/admin/reset', [\App\Http\Controllers\ResetController::class, 'reset'])->name('reset.store');
-    
-    // Quick Upload routes (simplified upload without class requirement)
-    Route::get('/quick-upload', [\App\Http\Controllers\QuickUploadController::class, 'index'])->name('quick-upload.index');
-    Route::post('/quick-upload', [\App\Http\Controllers\QuickUploadController::class, 'upload'])->name('quick-upload.store');
-    Route::post('/quick-upload/get-headers', [\App\Http\Controllers\QuickUploadController::class, 'getHeaders'])->name('quick-upload.get-headers');
 });
