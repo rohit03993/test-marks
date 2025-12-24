@@ -10,6 +10,7 @@ class StudentService
 {
     /**
      * Create or update student from Excel data
+     * STRICT RULE: Roll number is the primary identifier - no duplicates allowed
      */
     public function createOrUpdateStudent(array $data): array
     {
@@ -21,30 +22,52 @@ class StudentService
             return ['status' => 'error', 'message' => 'Student name is required'];
         }
 
-        // Try to find existing student by name and father name
-        $student = Student::where('name', $name)
-            ->when($fatherName, function ($query) use ($fatherName) {
-                return $query->where('father_name', $fatherName);
-            })
-            ->first();
+        // STRICT RULE: If roll number exists, it's the primary identifier
+        // Check for existing student by roll number FIRST
+        $student = null;
+        if (!empty($rollNumber)) {
+            $student = Student::where('roll_number', $rollNumber)->first();
+        }
 
         if ($student) {
-            // Update existing student
-            if (empty($student->father_name) && $fatherName) {
+            // Update existing student with latest information
+            // Latest information always wins (fills missing data, updates existing)
+            $student->name = $name; // Always update name with latest
+            
+            // Update father name if new one is provided (latest wins)
+            if (!empty($fatherName)) {
                 $student->father_name = $fatherName;
             }
-            if (empty($student->roll_number) && $rollNumber) {
-                $student->roll_number = $rollNumber;
-            }
+            
+            // Roll number already exists, so we keep it
             $student->save();
 
             return [
                 'status' => 'updated',
                 'student' => $student,
-                'message' => 'Student updated'
+                'message' => 'Student updated (matched by roll number)'
             ];
         } else {
-            // Create new student
+            // Check if roll number already exists (shouldn't happen due to unique constraint, but double-check)
+            if (!empty($rollNumber)) {
+                $existingByRoll = Student::where('roll_number', $rollNumber)->first();
+                if ($existingByRoll) {
+                    // This should not happen, but handle it gracefully
+                    $existingByRoll->name = $name;
+                    if (!empty($fatherName)) {
+                        $existingByRoll->father_name = $fatherName;
+                    }
+                    $existingByRoll->save();
+                    
+                    return [
+                        'status' => 'updated',
+                        'student' => $existingByRoll,
+                        'message' => 'Student updated (duplicate roll number prevented)'
+                    ];
+                }
+            }
+            
+            // Create new student only if roll number doesn't exist
             $student = Student::create([
                 'name' => $name,
                 'father_name' => $fatherName ?: null,

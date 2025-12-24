@@ -36,7 +36,7 @@ class StudentController extends Controller
         }
 
         $query = Student::query()
-            ->with(['activeClassStudent.academicClass'])
+            ->with(['activeClassStudent.academicClass', 'classStudents.examResults'])
             ->when($request->search, function ($query, $search) {
                 $query->where('name', 'like', "%{$search}%")
                     ->orWhere('roll_number', 'like', "%{$search}%");
@@ -57,16 +57,37 @@ class StudentController extends Controller
         // If per_page is 'all', get all results without pagination
         if ($perPage === 999999) {
             $students = $query->get();
+            $total = $students->count();
+            
+            // Add test count to each student
+            $students = $students->map(function ($student) {
+                $testCount = $student->classStudents->sum(function ($classStudent) {
+                    return $classStudent->examResults->count();
+                });
+                $student->test_count = $testCount;
+                return $student;
+            });
+            
             // Convert to paginator-like structure for frontend compatibility
+            // Use max(1, $total) to prevent division by zero when no results
             $students = new \Illuminate\Pagination\LengthAwarePaginator(
                 $students,
-                $students->count(),
-                $students->count(),
+                $total,
+                max(1, $total), // Prevent division by zero
                 1,
                 ['path' => $request->url(), 'query' => $request->query()]
             );
         } else {
             $students = $query->paginate($perPage);
+            
+            // Add test count to each student in paginated results
+            $students->getCollection()->transform(function ($student) {
+                $testCount = $student->classStudents->sum(function ($classStudent) {
+                    return $classStudent->examResults->count();
+                });
+                $student->test_count = $testCount;
+                return $student;
+            });
         }
 
         $classes = \App\Models\AcademicClass::orderBy('name')->get();

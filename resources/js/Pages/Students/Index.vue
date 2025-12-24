@@ -172,13 +172,16 @@ const formatDate = (date) => {
                                         Current Class
                                     </th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Tests Given
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Created At
                                     </th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 <tr v-if="students.data.length === 0">
-                                    <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                                    <td colspan="7" class="px-6 py-4 text-center text-gray-500">
                                         No students found.
                                     </td>
                                 </tr>
@@ -213,6 +216,20 @@ const formatDate = (date) => {
                                         </span>
                                         <span v-else class="text-gray-400 italic">
                                             Not assigned
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                        <span
+                                            :class="[
+                                                'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+                                                student.test_count === 0
+                                                    ? 'bg-red-100 text-red-800'
+                                                    : student.test_count <= 2
+                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                    : 'bg-green-100 text-green-800'
+                                            ]"
+                                        >
+                                            {{ student.test_count || 0 }}
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
